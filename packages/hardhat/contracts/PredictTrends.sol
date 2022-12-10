@@ -2,79 +2,15 @@
 pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import "./SafeMath.sol";
+import "./PredictTrendsInterface.sol";
 
 // token = GoerliETH
-contract PredictTrends is Ownable {
-    /**
-     * @notice Event emitted when order is created
-     */
-    event CreateOrder(address orderer, uint256 shot, bool trend);
-
-    /**
-     * @notice Event emitted when order is updated
-     */
-    event UpdateOrder(address orderer, uint256 newShot, bool trend);
-
-    /**
-     * @notice Event emitted when order is refunded
-     */
-    event RefundOrder(address orderer, uint256 refundAmount, uint256 refundFee);
-
-    /**
-     * @notice Event emitted when order is claimed
-     */
-    event ClaimOrder(address orderer, uint256 bonusAmount, uint256 share, uint256 shotPrice, uint256 shot);
-
-    /**
-     * @notice Event emitted when round is started
-     */
-    event RoundStarted(uint256 roundTime, uint256 roundBlockNumber, uint256 shotPrice, uint256 refundFee);
-
-    /**
-     * @notice Event emitted when order is end
-     */
-    event ExcuteResult(uint256 startPrice, uint256 endPrice, Trend trendResult);
-
+contract PredictTrends is Ownable, PredictTrendsInterface {
     using SafeMath for uint256;
 
-    uint256 upAmountSum; // 賭漲的總 shot 數
-    uint256 downAmountSum; // 賭跌的總 shot 數
-    uint256 public roundTime; // 每回合有多少開放時間
-
-    uint256 public shotPrice; // 一注多少 eth
-    uint256 public refundFee = 5; // 手續費 5 %
-    
-    uint256 public roundBlockNumber = 1; // 進行到第幾 round, 1 based
-
-    bool public available = false; // 合約是鎖起來還是開著
-    bool public inProgress = false; // 回合進行中
-
-    address constant TST = 0x7af963cF6D228E564e2A0aA0DdBF06210B38615D;
-    IERC20 public token = IERC20(TST);
-
-    enum Trend {down, up, hold} // hold is a edge case
-
-    struct OrderInfo {
-        uint256 shot; // 多少注
-        Trend trend; // 漲或跌 (0 跌 1 漲)
-    }
-    struct RoundInfo {
-        uint256 startPrice; // 回合開始時的當前價格
-        uint256 endPrice; // 回合結束時的當前價格
-        Trend trendResult; // 漲或跌 (0 跌 1 漲)
-    }
-    
-    /** roundId => user.address => {uint256 shot, bool trend} */
-    mapping(uint256 => mapping(address => OrderInfo)) public roundOrderInfo;
-
-    /** roundId => 回合開始時跟結束時的當前價格 */
-    mapping(uint256 => RoundInfo) public roundPriceInfo;
-
-
     /** 開啟新的一回合 */
-    function startNewRound() public onlyOwner notInProgress {
+    function startNewRound() override public onlyOwner notInProgress {
         inProgress = true;
 
         uint256 _startPrice = _getPrice();
@@ -88,7 +24,7 @@ contract PredictTrends is Ownable {
         // TODO: how to countdown on block chain?
     }
 
-    function excuteRoundResult() public {
+    function excuteRoundResult() override public {
         bool mockTimesup = false;
 
         if(mockTimesup) {
@@ -104,7 +40,7 @@ contract PredictTrends is Ownable {
         }
     }
 
-    function _getTrendResult(uint256 _startPrice, uint256 _endPrice) pure private returns (Trend) {
+    function _getTrendResult(uint256 _startPrice, uint256 _endPrice) override pure internal returns (Trend) {
         uint256 diff = _endPrice - _startPrice;
 
         if(diff == 0) return Trend.hold;
@@ -112,37 +48,21 @@ contract PredictTrends is Ownable {
         else return Trend.down;
     }
 
-    function _resetState() private {
+    function _resetState() override internal {
         upAmountSum = 0;
         downAmountSum = 0;
         inProgress = false;
     }
 
     /** 跟 chainlink 拿資訊 */
-    function _getPrice() pure private returns(uint256) {
+    function _getPrice() override pure internal returns(uint256) {
         uint256 mockPrice = 4000;
         return mockPrice;
     }
 
-    /** 調整每回合的時長，是過了幾秒不是切確的時間 */
-    function setRoundTime(uint256 _seconds) public onlyOwner notInProgress {
-        require(_seconds >= 300, "ERROR: Round time should be grater than or equal to 300 seconds.");
-        roundTime = _seconds;
-    }
-
-    /** 設定一注多少錢 */
-    function setShotPrice(uint256 _price) public onlyOwner notInProgress {
-        require(_price > 0, "ERROR: Price must be greater than 0.");
-        shotPrice = _price;
-    }
-
-    /** for emergency close */
-    function setAvailable(bool _available) public onlyOwner {
-        available = _available;
-    }
 
     /** 紀錄這筆交易的內容，誰、賭多少、賭什麼 */
-    function _setRecordInfo(uint256 _shot, bool _trend) private {
+    function _setRecordInfo(uint256 _shot, bool _trend) override internal {
         roundOrderInfo[roundBlockNumber][msg.sender].shot = _shot;
         roundOrderInfo[roundBlockNumber][msg.sender].trend = _trend ? Trend.up : Trend.down;
 
@@ -151,7 +71,7 @@ contract PredictTrends is Ownable {
     }
 
     /** 贏家來兌獎計算他的 share 、可以拿多少錢，輸家直接 revert */
-    function userClaim() public nonContractCall(msg.sender) notInProgress returns(bool) {
+    function userClaim() override public nonContractCall(msg.sender) notInProgress returns(bool) {
         uint256 shotAmount = roundOrderInfo[roundBlockNumber][msg.sender].shot * shotPrice;
         require(shotAmount > 0, "ERROR: You have no order for this round.");
         // TODO:
@@ -166,7 +86,7 @@ contract PredictTrends is Ownable {
     }
 
     /** user 建立一筆賭注 */
-    function createOrder(uint256 _shot, bool _trend) public nonContractCall(msg.sender) onlyInProgress {
+    function createOrder(uint256 _shot, bool _trend) override public nonContractCall(msg.sender) onlyInProgress {
         require(_shot > 0, "ERROR: Shot amount must be greater than 0.");
         require(token.balanceOf(msg.sender) >= _shot * shotPrice, "ERROR: your TST is not enough");
 
@@ -178,7 +98,7 @@ contract PredictTrends is Ownable {
     }
 
     /** user 加碼下注 */
-    function _updateOrder(uint256 _shot, bool _trend) private nonContractCall(msg.sender) onlyInProgress {
+    function _updateOrder(uint256 _shot, bool _trend) override internal nonContractCall(msg.sender) onlyInProgress {
         uint256 originalShot = roundOrderInfo[roundBlockNumber][msg.sender].shot;
         uint256 newShot = originalShot + _shot;
 
@@ -190,7 +110,7 @@ contract PredictTrends is Ownable {
     }
 
     /** user 不想玩了，可退但要收手續費 */
-    function refundOrder() public nonContractCall(msg.sender) onlyInProgress {
+    function refundOrder() override public nonContractCall(msg.sender) onlyInProgress {
         uint256 _shot = roundOrderInfo[roundBlockNumber][msg.sender].shot;
         require(_shot > 0, "ERROR: No money to refund.");
 
@@ -203,9 +123,30 @@ contract PredictTrends is Ownable {
         emit RefundOrder(msg.sender, refundAmount, refundFee);
     }
 
-    function withdraw() onlyOwner public {}
+    /** 調整每回合的時長，是過了幾秒不是切確的時間 */
+    function setRoundTime(uint256 _seconds) override public onlyOwner notInProgress {
+        require(_seconds >= 300, "ERROR: Round time should be grater than or equal to 300 seconds.");
+        roundTime = _seconds;
+    }
 
-    function _isContract(address addr) view private returns (bool) {
+    /** 設定一注多少錢 */
+    function setShotPrice(uint256 _price) override public onlyOwner notInProgress {
+        require(_price > 0, "ERROR: Price must be greater than 0.");
+        shotPrice = _price;
+        emit SetShotPrice(msg.sender, _price);
+    }
+
+    /** for emergency close */
+    function setAvailable(bool _available) override public onlyOwner {
+        available = _available;
+        emit SetAvailable(msg.sender, _available);
+    }
+
+    function withdraw(uint256 _amount) override public  onlyOwner{
+        emit Withdraw(msg.sender, _amount);
+    }
+
+    function _isContract(address addr) view internal returns (bool) {
         uint size;
         assembly { size := extcodesize(addr) }
         return size > 0;
