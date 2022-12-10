@@ -7,6 +7,36 @@ import "./SafeMath.sol";
 
 // token = GoerliETH
 contract PredictTrends is Ownable {
+    /**
+     * @notice Event emitted when order is created
+     */
+    event CreateOrder(address orderer, uint256 shot, bool trend);
+
+    /**
+     * @notice Event emitted when order is updated
+     */
+    event UpdateOrder(address orderer, uint256 newShot, bool trend);
+
+    /**
+     * @notice Event emitted when order is refunded
+     */
+    event RefundOrder(address orderer, uint256 refundAmount, uint256 refundFee);
+
+    /**
+     * @notice Event emitted when order is claimed
+     */
+    event ClaimOrder(address orderer, uint256 bonusAmount, uint256 share, uint256 shotPrice, uint256 shot);
+
+    /**
+     * @notice Event emitted when round is started
+     */
+    event RoundStarted(uint256 roundTime, uint256 roundBlockNumber, uint256 shotPrice, uint256 refundFee);
+
+    /**
+     * @notice Event emitted when order is end
+     */
+    event ExcuteResult(uint256 startPrice, uint256 endPrice, Trend trendResult);
+
     using SafeMath for uint256;
 
     uint256 upAmountSum; // 賭漲的總 shot 數
@@ -14,7 +44,6 @@ contract PredictTrends is Ownable {
     uint256 public roundTime; // 每回合有多少開放時間
 
     uint256 public shotPrice; // 一注多少 eth
-    uint256 public shotLimit; // 最多下幾注（最少就是 1 ，要提高就提高 shotPrice 就好）
     uint256 public refundFee = 5; // 手續費 5 %
     
     uint256 public roundBlockNumber = 1; // 進行到第幾 round, 1 based
@@ -24,7 +53,6 @@ contract PredictTrends is Ownable {
 
     address constant TST = 0x7af963cF6D228E564e2A0aA0DdBF06210B38615D;
     IERC20 public token = IERC20(TST);
-
 
     enum Trend {down, up, hold} // hold is a edge case
 
@@ -52,26 +80,36 @@ contract PredictTrends is Ownable {
         uint256 _startPrice = _getPrice();
         roundPriceInfo[roundBlockNumber].startPrice = _startPrice;
 
+        emit RoundStarted(roundTime, roundBlockNumber, shotPrice, refundFee);
         _countdown();
     }
 
     function _countdown() private {
-    // TODO: how to countdown on block chain?
+        // TODO: how to countdown on block chain?
     }
 
-    function excuteRoundResult() public returns (bool) {
+    function excuteRoundResult() public {
         bool mockTimesup = false;
-        bool result = false;
 
         if(mockTimesup) {
             uint256 _endPrice = _getPrice();
+            uint256 _startPrice = roundPriceInfo[roundBlockNumber].startPrice;
+            Trend trendResult = _getTrendResult(_endPrice, _startPrice);
+
             roundPriceInfo[roundBlockNumber].endPrice = _endPrice;
+            roundBlockNumber++;
 
             _resetState();
-            roundBlockNumber++;
-            result = true;
+            emit ExcuteResult(_startPrice, _endPrice, trendResult);
         }
-        return result;
+    }
+
+    function _getTrendResult(uint256 _startPrice, uint256 _endPrice) pure private returns (Trend) {
+        uint256 diff = _endPrice - _startPrice;
+
+        if(diff == 0) return Trend.hold;
+        else if(diff > 0) return Trend.up;
+        else return Trend.down;
     }
 
     function _resetState() private {
@@ -116,8 +154,15 @@ contract PredictTrends is Ownable {
     function userClaim() public nonContractCall(msg.sender) notInProgress returns(bool) {
         uint256 shotAmount = roundOrderInfo[roundBlockNumber][msg.sender].shot * shotPrice;
         require(shotAmount > 0, "ERROR: You have no order for this round.");
-        uint256 share = shotPrice;
-        return true;
+        // TODO:
+        uint256 mockPrice = 100;
+        uint256 mockShare = 10;
+
+        uint256 share = mockShare;
+        uint256 bonusAmount = mockPrice;
+
+        emit ClaimOrder(msg.sender, bonusAmount, share, shotPrice, roundOrderInfo[roundBlockNumber][msg.sender].shot);
+        return token.transfer(msg.sender, bonusAmount);
     }
 
     /** user 建立一筆賭注 */
@@ -126,7 +171,10 @@ contract PredictTrends is Ownable {
         require(token.balanceOf(msg.sender) >= _shot * shotPrice, "ERROR: your TST is not enough");
 
         if(roundOrderInfo[roundBlockNumber][msg.sender].shot > 0) _updateOrder(_shot, _trend);
-        else _setRecordInfo(_shot, _trend);
+        else {
+            _setRecordInfo(_shot, _trend);
+            emit CreateOrder(msg.sender, _shot, _trend);
+        }
     }
 
     /** user 加碼下注 */
@@ -138,6 +186,7 @@ contract PredictTrends is Ownable {
         require(_shot >= originalShot, "ERROR: New shot should be greater than original shot.");
 
         _setRecordInfo(newShot, _trend);
+        emit UpdateOrder(msg.sender, newShot, _trend);
     }
 
     /** user 不想玩了，可退但要收手續費 */
@@ -150,6 +199,8 @@ contract PredictTrends is Ownable {
         // TODO: underflow
         uint256 refundAmount = (_shot * shotPrice * refundFee) / 100;
         token.transfer(msg.sender, refundAmount);
+
+        emit RefundOrder(msg.sender, refundAmount, refundFee);
     }
 
     function withdraw() onlyOwner public {}
