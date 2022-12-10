@@ -74,7 +74,7 @@ contract PredictTrends is Ownable {
 
 
     /** 開啟新的一回合 */
-    function startNewRound() onlyOwner public notInProgress {
+    function startNewRound() public onlyOwner notInProgress {
         inProgress = true;
 
         uint256 _startPrice = _getPrice();
@@ -125,19 +125,19 @@ contract PredictTrends is Ownable {
     }
 
     /** 調整每回合的時長，是過了幾秒不是切確的時間 */
-    function setRoundTime(uint256 _seconds) onlyOwner public notInProgress {
+    function setRoundTime(uint256 _seconds) public onlyOwner notInProgress {
         require(_seconds >= 300, "ERROR: Round time should be grater than or equal to 300 seconds.");
         roundTime = _seconds;
     }
 
     /** 設定一注多少錢 */
-    function setShotPrice(uint256 _price) onlyOwner public notInProgress {
+    function setShotPrice(uint256 _price) public onlyOwner notInProgress {
         require(_price > 0, "ERROR: Price must be greater than 0.");
         shotPrice = _price;
     }
 
     /** for emergency close */
-    function setAvailable(bool _available) onlyOwner public {
+    function setAvailable(bool _available) public onlyOwner {
         available = _available;
     }
 
