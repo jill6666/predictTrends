@@ -16,9 +16,9 @@ contract PredictTrends is Ownable {
     uint256 roundBlockNumber = 1; // 進行到第幾 round, 1 based
 
     bool public available = false; // 合約是鎖起來還是開著
+    bool public claimable = !available; // user 是否可以拿錢
 
-    // TODO: error
-    address public constant GTH = 0x7c1ed097af300c85f3e9aaf51a15de5c967f828e;
+    address public constant TST = 0x7af963cF6D228E564e2A0aA0DdBF06210B38615D;
 
 
     enum Trend {down, up}
@@ -45,7 +45,10 @@ contract PredictTrends is Ownable {
 
     function _countdown() private {
         // TODO: how to countdown on block chain?
+        _resetState();
     }
+
+    function _resetState() private {}
 
     /** 跟 chainlink 拿資訊 */
     function _getPrice() private {
@@ -55,16 +58,19 @@ contract PredictTrends is Ownable {
 
     /** 調整每回合的時長，是過了幾秒不是切確的時間 */
     function setRoundTime(uint256 _seconds) onlyOwner public {
+        require(_seconds >= 300, "ERROR: Round time should be grater than or equal to 300 seconds.");
         roundTime = _seconds;
     }
 
     /** 設定一注多少錢 */
     function setShotPrice(uint256 _price) onlyOwner public {
+        require(_price > 0, "ERROR: Price must be greater than 0.");
         shotPrice = _price;
     }
 
     /** 設定最多能下幾注 */
     function setShotLimit(uint256 _limit) onlyOwner public {
+        require(_limit > 0, "ERROR: Limit must be greater than 0.");
         shotLimit = _limit;
     }
 
@@ -77,32 +83,37 @@ contract PredictTrends is Ownable {
     function _recordInfo(uint256 _shot, bool _trend) private {
         roundOrderInfo[roundBlockNumber][msg.sender].shot = _shot;
         roundOrderInfo[roundBlockNumber][msg.sender].trend = _trend;
+
+        if(_trend) upAmountSum + _shot;
+        else downAmountSum + _shot;
     }
 
     /** 贏家來兌獎計算他的 share 、可以拿多少錢，輸家直接 revert */
-    function userClaim() public nonContractCall(msg.sender) {}
+    function userClaim() public nonContractCall(msg.sender) {
+        require(claimable, "ERROR: Cannot claim currently.");
+    }
 
     /** user 建立一筆賭注 */
-    function createOrder(uint256 _shot, bool _trend) public nonContractCall(msg.sender) {
+    function createOrder(uint256 _shot, bool _trend) public nonContractCall(msg.sender) onlyAvailable {
         require(roundOrderInfo[roundBlockNumber][msg.sender].shot == 0, "ERROR: You've already one, use update instead.");
-        require(IERC20(GTH).balanceOf(msg.sender) >= _shot * shotPrice, "ERROR: your GTH is not enough");
+        require(IERC20(TST).balanceOf(msg.sender) >= _shot * shotPrice, "ERROR: your TST is not enough");
 
         _recordInfo(_shot, _trend);
     }
 
     /** user 更新賭注 */
-    function updateOrder(uint256 _shot, bool _trend) public nonContractCall(msg.sender) {
+    function updateOrder(uint256 _shot, bool _trend) public nonContractCall(msg.sender) onlyAvailable {
         uint256 originalShot = roundOrderInfo[roundBlockNumber][msg.sender].shot;
 
         require(originalShot >= 0, "ERROR: No order created yet.");
-        require(IERC20(GTH).balanceOf(msg.sender) >= _shot * shotPrice, "ERROR: Your GTH is not enough.");
+        require(IERC20(TST).balanceOf(msg.sender) >= _shot * shotPrice, "ERROR: Your TST is not enough.");
         require(_shot >= originalShot, "ERROR: New shot should be greater than original shot.");
 
         _recordInfo(_shot, _trend);
     }
 
     /** user 不想玩了 */
-    function refundOrder() public nonContractCall(msg.sender) {
+    function refundOrder() public nonContractCall(msg.sender) onlyAvailable {
         // TODO: require something
         delete roundOrderInfo[roundBlockNumber][msg.sender];
     }
@@ -117,6 +128,11 @@ contract PredictTrends is Ownable {
 
     modifier nonContractCall(address addr) {
         require(!isContract(addr), "ERROR: Only EOA can enteract with.");
+        _;
+    }
+
+    modifier onlyAvailable() {
+        require(available, "ERROR: Not available.");
         _;
     }
 
