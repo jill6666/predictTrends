@@ -98,7 +98,7 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
     /*** User Interface ***/
     function _getTrendResult(uint256 _startPrice, uint256 _endPrice) virtual internal returns (Trend);
     function _setRecordInfo(uint256 _shot, bool _trend) virtual internal ;
-    function userClaim() virtual external returns(bool);
+    function userClaim(uint256 _roundBlockNumber) virtual external returns(bool);
     function createOrder(uint256 _shot, bool _trend) virtual external;
     function _updateOrder(uint256 _shot, bool _trend) virtual internal;
     function refundOrder() virtual external;
@@ -112,4 +112,27 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
     function setShotPrice(uint256 _price) virtual external;
     function setAvailable(bool _available) virtual external;
     function withdraw(uint256 _amount) virtual external;
+
+    /*** Utils ***/
+        function _isContract(address addr) view internal returns (bool) {
+        uint size;
+        assembly { size := extcodesize(addr) }
+        return size > 0;
+    }
+
+    modifier nonContractCall(address addr) {
+        require(!_isContract(addr), "ERROR: Only EOA can enteract with.");
+        _;
+    }
+
+    modifier onlyInProgress() {
+        require(available, "ERROR: Not available.");
+        require(inProgress, "ERROR: Need to in progress.");
+        _;
+    }
+
+    modifier notInProgress() {
+        require(!inProgress, "ERROR: Not available when in progress.");
+        _;
+    }
 }
