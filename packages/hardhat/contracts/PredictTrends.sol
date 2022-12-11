@@ -24,7 +24,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
     */
     function createOrder(uint256 _shot, bool _trend) override public nonContractCall(msg.sender) onlyInProgress {
         require(_shot > 0, "ERROR: Shot amount must be greater than 0.");
-        require(token.balanceOf(msg.sender) >= _shot * shotPrice, "ERROR: your TST is not enough");
+        require(msg.sender.balance >= _shot * shotPrice, "ERROR: your ETH is not enough");
 
         if(roundOrderInfo[roundBlockNumber][msg.sender].shot > 0) _updateOrder(_shot, _trend);
         else {
@@ -41,7 +41,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         uint256 originalShot = roundOrderInfo[roundBlockNumber][msg.sender].shot;
         uint256 newShot = originalShot + _shot;
 
-        require(token.balanceOf(msg.sender) >= newShot * shotPrice, "ERROR: Your TST is not enough.");
+        require(msg.sender.balance >= newShot * shotPrice, "ERROR: Your ETH is not enough.");
         require(newShot >= originalShot, "ERROR: New shot should be greater than original shot.");
 
         _setRecordInfo(newShot, _trend);
@@ -49,17 +49,19 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
     }
 
     /** user 不想玩了，可退但要收手續費 */
-    function refundOrder() override public nonContractCall(msg.sender) onlyInProgress {
+    function refundOrder() override public payable nonContractCall(msg.sender) onlyInProgress {
         uint256 _shot = roundOrderInfo[roundBlockNumber][msg.sender].shot;
         require(_shot > 0, "ERROR: The order not found.");
 
         delete roundOrderInfo[roundBlockNumber][msg.sender];
         
         uint256 refundAmount = (_shot * shotPrice * refundFee) / 100;
-        token.transfer(msg.sender, refundAmount);
+        _safeTransferETH(msg.sender, refundAmount);
 
         emit RefundOrder(msg.sender, refundAmount, refundFee);
     }
+
+    
 
     /** 紀錄這筆交易的內容，誰、賭多少、賭什麼 */
     function _setRecordInfo(uint256 _shot, bool _trend) override internal {
@@ -73,7 +75,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
     /** 贏家來兌獎計算他的 share 、可以拿多少錢，輸家直接 revert */
     function userClaim(uint256 _roundBlockNumber) override public nonContractCall(msg.sender) returns(bool) {
         uint256 _shot = roundOrderInfo[_roundBlockNumber][msg.sender].shot;
-        uint256 _endPrice = roundPriceInfo[_roundBlockNumber].endPrice;
+        int _endPrice = roundPriceInfo[_roundBlockNumber].endPrice;
         Trend _trend = roundOrderInfo[_roundBlockNumber][msg.sender].trend;
         Trend _resultTrend = roundPriceInfo[_roundBlockNumber].trendResult;
         uint256 _winnerShotSum = _resultTrend == Trend.down ? downAmountSum : _resultTrend == Trend.up ? upAmountSum : 0;
@@ -91,21 +93,27 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         uint256 share = _shot / _winnerShotSum;
         uint256 bonusAmount = (_loserShotSum * shotPrice) * share * claimFee / 100;
 
+        _safeTransferETH(msg.sender, bonusAmount);
         emit ClaimOrder(msg.sender, bonusAmount, share, shotPrice, _shot);
-        return token.transfer(msg.sender, bonusAmount);
+        return true;
     }
 
     function _holdTrendRefund(uint256 _amount) private returns(bool) {
         emit RefundInHoldResult(msg.sender, _amount);
-        return token.transfer(msg.sender, _amount);
+        _safeTransferETH(msg.sender, _amount);
+        return true;
     }
 
     /*** Admin functions ***/
 
     /** 開啟新的一回合 */
     function startNewRound() override public onlyOwner notInProgress {
-        uint256 _startPrice = _getPrice();
+        require(shotPrice > 0, "ERROR: ShotPrice must be greater than 0.");
+
+        int _startPrice = _getPrice();
         roundPriceInfo[roundBlockNumber].startPrice = _startPrice;
+
+        roundBlockNumber++;
         inProgress = true;
 
         emit RoundStarted(roundTime, roundBlockNumber, shotPrice, refundFee);
@@ -118,22 +126,21 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
 
     function excuteRoundResult() override public {
         bool mockTimesup = false;
+        require(mockTimesup, "ERROR: Time is still counting down.");
 
-        if(mockTimesup) {
-            uint256 _endPrice = _getPrice();
-            uint256 _startPrice = roundPriceInfo[roundBlockNumber].startPrice;
-            Trend trendResult = _getTrendResult(_endPrice, _startPrice);
+        int _endPrice = _getPrice();
+        int _startPrice = roundPriceInfo[roundBlockNumber].startPrice;
+        Trend trendResult = _getTrendResult(_endPrice, _startPrice);
 
-            roundPriceInfo[roundBlockNumber].endPrice = _endPrice;
-            roundBlockNumber++;
+        roundPriceInfo[roundBlockNumber].endPrice = _endPrice;
+        roundPriceInfo[roundBlockNumber].trendResult = trendResult;
 
-            _resetState();
-            emit ExcuteResult(_startPrice, _endPrice, trendResult);
-        }
+        _resetState();
+        emit ExcuteResult(_startPrice, _endPrice, trendResult);
     }
 
-    function _getTrendResult(uint256 _startPrice, uint256 _endPrice) override pure internal returns (Trend) {
-        uint256 diff = _endPrice - _startPrice;
+    function _getTrendResult(int _startPrice, int _endPrice) override pure internal returns (Trend) {
+        int diff = _endPrice - _startPrice;
 
         if(diff == 0) return Trend.hold;
         else if(diff > 0) return Trend.up;
@@ -146,15 +153,9 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         inProgress = false;
     }
 
-    /** 跟 chainlink 拿資訊 */
-    function _getPrice() override pure internal returns(uint256) {
-        uint256 mockPrice = 4000;
-        return mockPrice;
-    }
-
     /** 調整每回合的時長，是過了幾秒不是切確的時間 */
     function setRoundTime(uint256 _seconds) override public onlyOwner notInProgress {
-        require(_seconds >= 300, "ERROR: Round time should be grater than or equal to 300 seconds.");
+        require(_seconds >= roundTimeLowerLimit, "ERROR: Round time should be grater than or equal to roundTimeLowerLimit.");
         roundTime = _seconds;
     }
 
@@ -165,13 +166,9 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         emit SetShotPrice(msg.sender, _price);
     }
 
-    /** for emergency close */
-    function setAvailable(bool _available) override public onlyOwner {
-        available = _available;
-        emit SetAvailable(msg.sender, _available);
-    }
-
-    function withdraw(uint256 _amount) override public  onlyOwner{
+    /** TODO: 權限會不會太大？ owner 想要在什麼時候領多少錢出來都可以，怎麼設計比較好？ */
+    function withdraw(uint256 _amount) override public onlyOwner {
+        _safeTransferETH(msg.sender, _amount);
         emit Withdraw(msg.sender, _amount);
     }
 
