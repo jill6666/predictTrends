@@ -9,9 +9,10 @@ contract PredictTrendsStorage {
     uint256 public roundTime; // 每回合有多少開放時間
 
     uint256 public shotPrice; // 一注多少 eth
-    uint256 public refundFee = 5; // 手續費 5 %
+    uint256 public refundFee = 5; // 退款手續費 5 %
+    uint256 public claimFee = 1; // 領獎手續費 1 %
     
-    uint256 public roundBlockNumber = 1; // 進行到第幾 round, 1 based
+    uint256 public roundBlockNumber = 0; // 進行到第幾 round, 0 based
 
     bool public available = false; // 合約是鎖起來還是開著
     bool public inProgress = false; // 回合進行中
@@ -60,6 +61,11 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
      * @notice Event emitted when order is claimed
      */
     event ClaimOrder(address orderer, uint256 bonusAmount, uint256 share, uint256 shotPrice, uint256 shot);
+
+    /**
+     * @notice Event emitted when order is refunded in hold trend result
+     */
+    event RefundInHoldResult(address orderer, uint256 refundAmount);
 
     
 

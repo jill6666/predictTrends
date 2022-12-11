@@ -9,13 +9,19 @@ import "./PredictTrendsInterface.sol";
 // 1. check if underflow for every calculation
 // 2. countdown
 // 3. call excuted off chain
+// 4. deploy to Goerli
+// 5. test case (optional if time enough 🥲)
+// 6. website (optional...)
 
 contract PredictTrends is Ownable, PredictTrendsInterface {
     using SafeMath for uint256;
     
     /*** PredictTrends functions ***/
 
-    /** user 建立一筆賭注 */
+    /** user 建立一筆賭注 
+     * @param _shot 下多少注
+     * @param _trend 預測結果 false 跌 true 漲
+    */
     function createOrder(uint256 _shot, bool _trend) override public nonContractCall(msg.sender) onlyInProgress {
         require(_shot > 0, "ERROR: Shot amount must be greater than 0.");
         require(token.balanceOf(msg.sender) >= _shot * shotPrice, "ERROR: your TST is not enough");
@@ -27,13 +33,16 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         }
     }
 
-    /** user 加碼下注 */
+    /** user 加碼下注，不能減少下注額，只能增加
+     * @param _shot 再下多少注
+     * @param _trend 預測結果 false 跌 true 漲
+    */
     function _updateOrder(uint256 _shot, bool _trend) override internal nonContractCall(msg.sender) onlyInProgress {
         uint256 originalShot = roundOrderInfo[roundBlockNumber][msg.sender].shot;
         uint256 newShot = originalShot + _shot;
 
         require(token.balanceOf(msg.sender) >= newShot * shotPrice, "ERROR: Your TST is not enough.");
-        require(_shot >= originalShot, "ERROR: New shot should be greater than original shot.");
+        require(newShot >= originalShot, "ERROR: New shot should be greater than original shot.");
 
         _setRecordInfo(newShot, _trend);
         emit UpdateOrder(msg.sender, newShot, _trend);
@@ -42,7 +51,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
     /** user 不想玩了，可退但要收手續費 */
     function refundOrder() override public nonContractCall(msg.sender) onlyInProgress {
         uint256 _shot = roundOrderInfo[roundBlockNumber][msg.sender].shot;
-        require(_shot > 0, "ERROR: No money to refund.");
+        require(_shot > 0, "ERROR: The order not found.");
 
         delete roundOrderInfo[roundBlockNumber][msg.sender];
         
@@ -62,35 +71,42 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
     }
 
     /** 贏家來兌獎計算他的 share 、可以拿多少錢，輸家直接 revert */
-    function userClaim(uint256 _roundBlockNumber) override public nonContractCall(msg.sender) notInProgress returns(bool) {
-        uint256 shotAmount = roundOrderInfo[_roundBlockNumber][msg.sender].shot * shotPrice;
+    function userClaim(uint256 _roundBlockNumber) override public nonContractCall(msg.sender) returns(bool) {
+        uint256 _shot = roundOrderInfo[_roundBlockNumber][msg.sender].shot;
+        uint256 _endPrice = roundPriceInfo[_roundBlockNumber].endPrice;
         Trend _trend = roundOrderInfo[_roundBlockNumber][msg.sender].trend;
         Trend _resultTrend = roundPriceInfo[_roundBlockNumber].trendResult;
+        uint256 _winnerShotSum = _resultTrend == Trend.down ? downAmountSum : _resultTrend == Trend.up ? upAmountSum : 0;
+        uint256 _loserShotSum = _resultTrend == Trend.down ? upAmountSum : _resultTrend == Trend.up ? downAmountSum : 0;
+        bool isHoldTrend = _resultTrend == Trend.hold;
 
-        require(shotAmount > 0, "ERROR: You have no order for this round.");
-        require(_trend == _resultTrend,"ERROR: So sad, you are not the winner of this round.");
-        // TODO:
-        // 1. 贏家拿錢要收手續費
-        // 2. 算贏家有多少個 share
-        // 3. 算出贏家可以拿到多少錢
-        uint256 mockPrice = 100;
-        uint256 mockShare = 10;
+        require(_endPrice > 0, "ERROR: The round is not in the end.");
+        require(_shot > 0, "ERROR: You have no order for this round.");
+        require(_trend == _resultTrend || isHoldTrend, "ERROR: So sad, you are not the winner of this round.");
 
-        uint256 share = mockShare;
-        uint256 bonusAmount = mockPrice;
+        uint256 refundAmount = _shot * shotPrice;
+        if(isHoldTrend) return _holdTrendRefund(refundAmount);
 
-        emit ClaimOrder(msg.sender, bonusAmount, share, shotPrice, roundOrderInfo[roundBlockNumber][msg.sender].shot);
+        // TODO: underflow
+        uint256 share = _shot / _winnerShotSum;
+        uint256 bonusAmount = (_loserShotSum * shotPrice) * share * claimFee / 100;
+
+        emit ClaimOrder(msg.sender, bonusAmount, share, shotPrice, _shot);
         return token.transfer(msg.sender, bonusAmount);
+    }
+
+    function _holdTrendRefund(uint256 _amount) private returns(bool) {
+        emit RefundInHoldResult(msg.sender, _amount);
+        return token.transfer(msg.sender, _amount);
     }
 
     /*** Admin functions ***/
 
     /** 開啟新的一回合 */
     function startNewRound() override public onlyOwner notInProgress {
-        inProgress = true;
-
         uint256 _startPrice = _getPrice();
         roundPriceInfo[roundBlockNumber].startPrice = _startPrice;
+        inProgress = true;
 
         emit RoundStarted(roundTime, roundBlockNumber, shotPrice, refundFee);
         _countdown();
