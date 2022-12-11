@@ -34,19 +34,6 @@ contract PredictTrendsStorage {
 
     /** roundId => 回合開始時跟結束時的當前價格 */
     mapping(uint256 => RoundInfo) public roundPriceInfo;
-
-    AggregatorV3Interface internal priceFeed;
-        
-    /**
-     * Network: Goerli
-     * Aggregator: ETH/USD
-     * Address: 0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e
-     */
-    constructor() {
-        priceFeed = AggregatorV3Interface(
-            0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e
-        );
-    }
 }
 
 abstract contract PredictTrendsInterface is PredictTrendsStorage {
@@ -77,6 +64,11 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
      */
     event RefundInHoldResult(address orderer, uint256 refundAmount);
 
+    /**
+     * @notice Event emitted when received value
+     */
+    event Received(address, uint256);
+
     
 
     /*** Admin Events ***/
@@ -106,21 +98,34 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
      */
     event SetRoundTime(address operator, uint256 roundTime);
 
+    AggregatorV3Interface internal priceFeed;
+        
+    /**
+     * Network: Goerli
+     * Aggregator: ETH/USD
+     * Address: 0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e
+     */
+    constructor() {
+        priceFeed = AggregatorV3Interface(
+            0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e
+        );
+    }
+
     /*** User Interface ***/
+    function userClaim(uint256 _roundBlockNumber) virtual external returns(bool);
+    function createOrder(uint256 _shot, bool _trend) virtual external payable;
+    function updateOrder(uint256 _shot, bool _trend) virtual external payable;
+    function refundOrder() virtual external;
     function _getTrendResult(int _startPrice, int _endPrice) virtual internal returns (Trend);
     function _setRecordInfo(uint256 _shot, bool _trend) virtual internal ;
-    function userClaim(uint256 _roundBlockNumber) virtual external returns(bool);
-    function createOrder(uint256 _shot, bool _trend) virtual external;
-    function _updateOrder(uint256 _shot, bool _trend) virtual internal;
-    function refundOrder() virtual external payable;
 
     /*** Admin Functions ***/
     function startNewRound() virtual external;
     function excuteRoundResult() virtual external;
-    function _resetState() virtual internal;
     function setRoundTime(uint256 _seconds) virtual external;
     function setShotPrice(uint256 _price) virtual external;
     function withdraw(uint256 _amount) virtual external;
+    function _resetState() virtual internal;
 
 
     /*** Utils ***/
@@ -135,15 +140,17 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
         require(success, "Failed to send Ether");
     }
 
-    function _getPrice() view internal returns(int) {
-       (
+    /**
+     * Returns the latest price
+     */
+    function _getPrice() view internal returns (int) {
+        (
             ,
             /*uint80 roundID*/ int price /*uint startedAt*/ /*uint timeStamp*/ /*uint80 answeredInRound*/,
             ,
             ,
 
         ) = priceFeed.latestRoundData();
-
         return price;
     }
 

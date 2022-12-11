@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "./SafeMath.sol";
 import "./PredictTrendsInterface.sol";
 
-// TODO: 
+// TODO:
 // 1. check if underflow for every calculation
 // 2. countdown
 // 3. call excuted off chain
@@ -22,12 +22,13 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
      * @param _shot 下多少注
      * @param _trend 預測結果 false 跌 true 漲
     */
-    function createOrder(uint256 _shot, bool _trend) override public nonContractCall(msg.sender) onlyInProgress {
+    function createOrder(uint256 _shot, bool _trend) override public payable nonContractCall(msg.sender) onlyInProgress {
         require(_shot > 0, "ERROR: Shot amount must be greater than 0.");
-        require(msg.sender.balance >= _shot * shotPrice, "ERROR: your ETH is not enough");
 
-        if(roundOrderInfo[roundBlockNumber][msg.sender].shot > 0) _updateOrder(_shot, _trend);
+        if(roundOrderInfo[roundBlockNumber][msg.sender].shot > 0) updateOrder(_shot, _trend);
         else {
+            require(msg.value >= _shot * shotPrice, "ERROR: Your ETH is not enough");
+            
             _setRecordInfo(_shot, _trend);
             emit CreateOrder(msg.sender, _shot, _trend);
         }
@@ -37,11 +38,11 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
      * @param _shot 再下多少注
      * @param _trend 預測結果 false 跌 true 漲
     */
-    function _updateOrder(uint256 _shot, bool _trend) override internal nonContractCall(msg.sender) onlyInProgress {
+    function updateOrder(uint256 _shot, bool _trend) override public payable nonContractCall(msg.sender) onlyInProgress {
         uint256 originalShot = roundOrderInfo[roundBlockNumber][msg.sender].shot;
         uint256 newShot = originalShot + _shot;
 
-        require(msg.sender.balance >= newShot * shotPrice, "ERROR: Your ETH is not enough.");
+        require(msg.value >= newShot * shotPrice, "ERROR: Your ETH is not enough.");
         require(newShot >= originalShot, "ERROR: New shot should be greater than original shot.");
 
         _setRecordInfo(newShot, _trend);
@@ -49,7 +50,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
     }
 
     /** user 不想玩了，可退但要收手續費 */
-    function refundOrder() override public payable nonContractCall(msg.sender) onlyInProgress {
+    function refundOrder() override public nonContractCall(msg.sender) onlyInProgress {
         uint256 _shot = roundOrderInfo[roundBlockNumber][msg.sender].shot;
         require(_shot > 0, "ERROR: The order not found.");
 
@@ -75,6 +76,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
     /** 贏家來兌獎計算他的 share 、可以拿多少錢，輸家直接 revert */
     function userClaim(uint256 _roundBlockNumber) override public nonContractCall(msg.sender) returns(bool) {
         uint256 _shot = roundOrderInfo[_roundBlockNumber][msg.sender].shot;
+        int _startPrice = roundPriceInfo[_roundBlockNumber].startPrice;
         int _endPrice = roundPriceInfo[_roundBlockNumber].endPrice;
         Trend _trend = roundOrderInfo[_roundBlockNumber][msg.sender].trend;
         Trend _resultTrend = roundPriceInfo[_roundBlockNumber].trendResult;
@@ -82,6 +84,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         uint256 _loserShotSum = _resultTrend == Trend.down ? upAmountSum : _resultTrend == Trend.up ? downAmountSum : 0;
         bool isHoldTrend = _resultTrend == Trend.hold;
 
+        require(_startPrice > 0, "ERROR: The round is not started.");
         require(_endPrice > 0, "ERROR: The round is not in the end.");
         require(_shot > 0, "ERROR: You have no order for this round.");
         require(_trend == _resultTrend || isHoldTrend, "ERROR: So sad, you are not the winner of this round.");
@@ -129,7 +132,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         require(mockTimesup, "ERROR: Time is still counting down.");
 
         int _endPrice = _getPrice();
-        int _startPrice = roundPriceInfo[roundBlockNumber].startPrice;
+        int256 _startPrice = roundPriceInfo[roundBlockNumber].startPrice;
         Trend trendResult = _getTrendResult(_endPrice, _startPrice);
 
         roundPriceInfo[roundBlockNumber].endPrice = _endPrice;
@@ -140,7 +143,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
     }
 
     function _getTrendResult(int _startPrice, int _endPrice) override pure internal returns (Trend) {
-        int diff = _endPrice - _startPrice;
+        int256 diff = _endPrice - _startPrice;
 
         if(diff == 0) return Trend.hold;
         else if(diff > 0) return Trend.up;
@@ -172,5 +175,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         emit Withdraw(msg.sender, _amount);
     }
 
-    receive() external payable {}
+    receive() external payable {
+        emit Received(msg.sender, msg.value);
+    }
 }
