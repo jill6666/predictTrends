@@ -10,23 +10,31 @@ contract PredictTrendsStorage {
 
     // Map value to counter
     mapping(uint256 => uint256) public counterToValue;
+    mapping(uint256 => uint256) public counterToValue_execute;
 
     // Map the last updated time to the counter
     mapping(uint256 => uint256) public counterToLastTimeStamp;
+    mapping(uint256 => uint256) public counterToLastTimeStamp_execute;
 
     // Map counter to to the upkeep
     mapping(uint256 => uint256) public counterToUpKeepID;
+    mapping(uint256 => uint256) public counterToUpKeepID_execute;
 
     bytes performData;
+    bytes performData_execute;
 
     /*** Predict Trends Storage ***/
 
     uint256 upAmountSum; // 賭漲的總 shot 數
     uint256 downAmountSum; // 賭跌的總 shot 數
 
-    // Set upkeep interval to 60 * 60 * 24 seconds (86400)
-    // using 60 in dev
-    uint256 interval = 60;
+    // Set upkeep interval, 開放 20 hr 下注，4 小時 lock or 維修
+    uint256 interval = 86400;
+    uint256 interval_execute = 72000;
+
+    // for dev, 開放 1 min 下注，15 sec lock or 維修
+    uint256 dev_interval = 60;
+    uint256 dev_interval_execute = 15;
 
     uint256 public roundTime; // 每回合有多少開放時間
     uint256 public roundTimeLowerLimit = 300; // 每回合最少要幾秒
@@ -103,7 +111,7 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
     /**
      * @notice Event emitted when order is end
      */
-    event ExcuteResult(int startPrice, int endPrice, Trend trendResult);
+    event executeResult(int startPrice, int endPrice, Trend trendResult);
     
     /**
      * @notice Event emitted when token in contract is withdraw by admin
@@ -143,7 +151,7 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
 
     /*** Admin Functions ***/
     function startNewRound() virtual external;
-    function excuteRoundResult() virtual external;
+    function executeRoundResult() virtual external;
     function setRoundTime(uint256 _seconds) virtual external;
     function setShotPrice(uint256 _price) virtual external;
     function withdraw(uint256 _amount) virtual external;

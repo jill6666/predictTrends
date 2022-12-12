@@ -8,7 +8,7 @@ import "./PredictTrendsInterface.sol";
 // TODO:
 // 1. check if underflow for every calculation
 // 2. countdown
-// 3. call excuted off chain
+// 3. call executed off chain
 // 4. deploy to Goerli
 // 5. test case (optional if time enough 🥲)
 // 6. website (optional...)
@@ -124,6 +124,15 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
 
     /** 開啟新的一回合 */
     function startNewRound() override external notInProgress {
+        uint256 decodeCounterID = abi.decode(performData, (uint256));
+        bool inRound = (block.timestamp - counterToLastTimeStamp[decodeCounterID]) > dev_interval;
+
+        if (inRound) {
+            counterToLastTimeStamp[decodeCounterID] = block.timestamp;
+            counterToValue[decodeCounterID] = counterToValue[decodeCounterID] + 1;
+        }
+
+        require(!inRound, "ERROR: Time is still counting down.");
         require(shotPrice > 0, "ERROR: ShotPrice must be greater than 0.");
 
         int _startPrice = _getPrice();
@@ -148,13 +157,13 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
     }
 
     /** 讓 chainlink time-based automation call in every day */
-    function excuteRoundResult() override external {
-        uint256 counterID = abi.decode(performData, (uint256));
-        bool inRound = (block.timestamp - counterToLastTimeStamp[counterID]) > interval;
+    function executeRoundResult() override external {
+        uint256 counterID = abi.decode(performData_execute, (uint256));
+        bool inRound = (block.timestamp - counterToLastTimeStamp_execute[counterID]) > dev_interval_execute;
 
         if (inRound) {
-            counterToLastTimeStamp[counterID] = block.timestamp;
-            counterToValue[counterID] = counterToValue[counterID] + 1;
+            counterToLastTimeStamp_execute[counterID] = block.timestamp;
+            counterToValue_execute[counterID] = counterToValue_execute[counterID] + 1;
         }
 
         require(!inRound, "ERROR: Time is still counting down.");
@@ -167,7 +176,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         roundPriceInfo[roundBlockNumber].trendResult = trendResult;
 
         _resetState();
-        emit ExcuteResult(_startPrice, _endPrice, trendResult);
+        emit executeResult(_startPrice, _endPrice, trendResult);
     }
 
     function _getTrendResult(int _startPrice, int _endPrice) override pure internal returns (Trend) {
