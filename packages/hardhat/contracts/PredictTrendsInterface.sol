@@ -2,10 +2,32 @@
 pragma solidity 0.8.17;
 
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import "@openzeppelin/contracts/utils/Counters.sol";
 
 contract PredictTrendsStorage {
+
+    /*** Counter Storage ***/
+
+    // Map value to counter
+    mapping(uint256 => uint256) public counterToValue;
+
+    // Map the last updated time to the counter
+    mapping(uint256 => uint256) public counterToLastTimeStamp;
+
+    // Map counter to to the upkeep
+    mapping(uint256 => uint256) public counterToUpKeepID;
+
+    bytes performData;
+
+    /*** Predict Trends Storage ***/
+
     uint256 upAmountSum; // 賭漲的總 shot 數
     uint256 downAmountSum; // 賭跌的總 shot 數
+
+    // Set upkeep interval to 60 * 60 * 24 seconds (86400)
+    // using 60 in dev
+    uint256 interval = 60;
+
     uint256 public roundTime; // 每回合有多少開放時間
     uint256 public roundTimeLowerLimit = 300; // 每回合最少要幾秒
 
