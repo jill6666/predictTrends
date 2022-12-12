@@ -7,10 +7,11 @@ import "./PredictTrendsInterface.sol";
 
 // TODO:
 // 1. check if underflow for every calculation
-// 2. countdown
+// 2. check number for 單位換算 eth to wei
+//// 2. countdown
 // 3. call executed off chain
 // 4. deploy to Goerli
-// 5. test case (optional if time enough 🥲)
+//// 5. test case (optional if time enough 🥲)
 // 6. website (optional...)
 
 contract PredictTrends is Ownable, PredictTrendsInterface {
