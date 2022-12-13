@@ -36,9 +36,6 @@ contract PredictTrendsStorage {
     uint256 dev_interval = 60;
     uint256 dev_interval_execute = 15;
 
-    uint256 public roundTime; // 每回合有多少開放時間
-    uint256 public roundTimeLowerLimit = 300; // 每回合最少要幾秒
-
     uint256 public shotPrice; // 一注多少 eth
     uint256 public refundFee = 5; // 退款手續費 5 %
     uint256 public claimFee = 1; // 領獎手續費 1 %
@@ -106,7 +103,7 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
     /**
      * @notice Event emitted when round is started
      */
-    event RoundStarted(uint256 roundTime, uint256 roundBlockNumber, uint256 shotPrice, uint256 refundFee);
+    event RoundStarted(uint256 interval, uint256 roundBlockNumber, uint256 shotPrice, uint256 refundFee);
 
     /**
      * @notice Event emitted when order is end
@@ -122,11 +119,6 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
      * @notice Event emitted when the shotPrice is changed
      */
     event SetShotPrice(address operator, uint256 shotPrice);
-
-    /**
-     * @notice Event emitted when the roundTime is changed
-     */
-    event SetRoundTime(address operator, uint256 roundTime);
 
     AggregatorV3Interface internal priceFeed;
         
@@ -152,7 +144,6 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
     /*** Admin Functions ***/
     function startNewRound() virtual external;
     function executeRoundResult() virtual external;
-    function setRoundTime(uint256 _seconds) virtual external;
     function setShotPrice(uint256 _price) virtual external;
     function withdraw(uint256 _amount) virtual external;
     function _resetState() virtual internal;

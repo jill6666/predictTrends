@@ -2,7 +2,7 @@ export const mockData = {
   roundInfo: {
     roundID: 1,
     shotPrice: "0.001 ETH",
-    roundTime: "5 mins",
+    interval: "5 mins",
     availability: true,
     refundFee: "5%",
     claimFee: "1%",

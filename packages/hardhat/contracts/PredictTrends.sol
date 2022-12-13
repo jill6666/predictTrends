@@ -142,7 +142,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         roundBlockNumber++;
         inProgress = true;
 
-        emit RoundStarted(roundTime, roundBlockNumber, shotPrice, refundFee);
+        emit RoundStarted(dev_interval, roundBlockNumber, shotPrice, refundFee);
 
         uint256 counterID = createNewCounter();
         uint256 upkeepID = uint256(keccak256(
@@ -192,12 +192,6 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         upAmountSum = 0;
         downAmountSum = 0;
         inProgress = false;
-    }
-
-    /** 調整每回合的時長，是過了幾秒不是切確的時間 */
-    function setRoundTime(uint256 _seconds) override public onlyOwner notInProgress {
-        require(_seconds >= roundTimeLowerLimit, "ERROR: Round time should be grater than or equal to roundTimeLowerLimit.");
-        roundTime = _seconds;
     }
 
     /** 設定一注多少錢 */
