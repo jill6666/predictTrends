@@ -6,13 +6,14 @@ import "./SafeMath.sol";
 import "./PredictTrendsInterface.sol";
 
 // TODO:
-// 1. check if underflow for every calculation
-// 2. check number for 單位換算 eth to wei
+//// 1. check if underflow for every calculation
+//// 2. check number for 單位換算 eth to wei
 //// 2. countdown
 // 3. call executed off chain
 // 4. deploy to Goerli
 //// 5. test case (optional if time enough 🥲)
 // 6. website (optional...)
+//// 7. test on remix
 
 contract PredictTrends is Ownable, PredictTrendsInterface {
     using SafeMath for uint256;
@@ -54,11 +55,12 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
      * @param _shot 再下多少注
      * @param _trend 預測結果 false 跌 true 漲
     */
+   // TODO: public
     function updateOrder(uint256 _shot, bool _trend) override public payable nonContractCall(msg.sender) onlyInProgress {
         uint256 originalShot = roundOrderInfo[roundBlockNumber][msg.sender].shot;
         uint256 newShot = originalShot + _shot;
 
-        require(msg.value >= newShot * shotPrice, "ERROR: Your ETH is not enough.");
+        require(msg.value >= _shot * shotPrice, "ERROR: Your ETH is not enough.");
         require(newShot >= originalShot, "ERROR: New shot should be greater than original shot.");
 
         _setRecordInfo(newShot, _trend);
@@ -72,7 +74,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
 
         delete roundOrderInfo[roundBlockNumber][msg.sender];
         
-        uint256 refundAmount = (_shot * shotPrice * refundFee) / 100;
+        uint256 refundAmount = (_shot * shotPrice * (100 - refundFee)).div(100);
         _safeTransferETH(msg.sender, refundAmount);
 
         emit RefundOrder(msg.sender, refundAmount, refundFee);
@@ -106,13 +108,20 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         uint256 refundAmount = _shot * shotPrice;
         if(isHoldTrend) return _holdTrendRefund(refundAmount);
 
-        // TODO: underflow
-        uint256 share = _shot / _winnerShotSum;
-        uint256 bonusAmount = (_loserShotSum * shotPrice) * share * claimFee / 100;
+        if(_winnerShotSum == 0 || _loserShotSum == 0) {
+            // refund directly
+            uint256 rewardAmount = (_shot * shotPrice * (100 - claimFee)).div(100);
+            _safeTransferETH(msg.sender, rewardAmount);
+            emit ClaimOrder(msg.sender, rewardAmount, 0, shotPrice, _shot);
+            return true;
+        } else {
+            uint256 share = ((_loserShotSum * shotPrice).div(_winnerShotSum) * (100 - claimFee)).div(100);
+            uint256 rewardAmount = _shot * share;
 
-        _safeTransferETH(msg.sender, bonusAmount);
-        emit ClaimOrder(msg.sender, bonusAmount, share, shotPrice, _shot);
-        return true;
+            _safeTransferETH(msg.sender, rewardAmount);
+            emit ClaimOrder(msg.sender, rewardAmount, share, shotPrice, _shot);
+            return true;
+        }
     }
 
     function _holdTrendRefund(uint256 _amount) private returns(bool) {
@@ -137,10 +146,10 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
         require(shotPrice > 0, "ERROR: ShotPrice must be greater than 0.");
 
         int _startPrice = _getPrice();
-        roundPriceInfo[roundBlockNumber].startPrice = _startPrice;
-
+        // update state
         roundBlockNumber++;
         inProgress = true;
+        roundPriceInfo[roundBlockNumber].startPrice = _startPrice;
 
         emit RoundStarted(dev_interval, roundBlockNumber, shotPrice, refundFee);
 

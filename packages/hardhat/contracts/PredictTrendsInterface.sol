@@ -36,7 +36,7 @@ contract PredictTrendsStorage {
     uint256 dev_interval = 60;
     uint256 dev_interval_execute = 15;
 
-    uint256 public shotPrice; // 一注多少 eth
+    uint256 public shotPrice = 1000000000000; // 一注多少 eth 1000000000000 == 0.000001 ether
     uint256 public refundFee = 5; // 退款手續費 5 %
     uint256 public claimFee = 1; // 領獎手續費 1 %
     
@@ -84,7 +84,7 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
     /**
      * @notice Event emitted when order is claimed
      */
-    event ClaimOrder(address orderer, uint256 bonusAmount, uint256 share, uint256 shotPrice, uint256 shot);
+    event ClaimOrder(address orderer, uint256 value, uint256 share, uint256 shotPrice, uint256 shot);
 
     /**
      * @notice Event emitted when order is refunded in hold trend result
@@ -96,6 +96,10 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
      */
     event Received(address, uint256);
 
+    /**
+     * @notice Event emitted when transfer completed
+     */
+    event Transfer(address to, uint256 value);
     
 
     /*** Admin Events ***/
@@ -159,6 +163,7 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
     function _safeTransferETH(address _to, uint256 _value) internal {
         (bool success, ) = _to.call{value: _value}(new bytes(0));
         require(success, "Failed to send Ether");
+        emit Transfer(_to, _value);
     }
 
     /**
