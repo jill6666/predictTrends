@@ -17,21 +17,6 @@ import "./PredictTrendsInterface.sol";
 
 contract PredictTrends is Ownable, PredictTrendsInterface {
     using SafeMath for uint256;
-    using Counters for Counters.Counter;
-
-    // Store the counter id
-    Counters.Counter private _counterIdCounter;
-
-    /** Create a new counter */
-    function createNewCounter() public returns (uint256) {
-        uint256 counterID = _counterIdCounter.current();
-
-        _counterIdCounter.increment();
-        counterToValue[counterID] = 0;
-        counterToLastTimeStamp[counterID] = block.timestamp;
-        
-        return counterID;
-    }
     
     /*** PredictTrends functions ***/
 
@@ -134,49 +119,24 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
 
     /** 開啟新的一回合 */
     function startNewRound() override external notInProgress {
-        uint256 decodeCounterID = abi.decode(performData, (uint256));
-        bool inRound = (block.timestamp - counterToLastTimeStamp[decodeCounterID]) > dev_interval;
-
-        if (inRound) {
-            counterToLastTimeStamp[decodeCounterID] = block.timestamp;
-            counterToValue[decodeCounterID] = counterToValue[decodeCounterID] + 1;
-        }
-
-        require(!inRound, "ERROR: Time is still counting down.");
         require(shotPrice > 0, "ERROR: ShotPrice must be greater than 0.");
+        require(roundBlockNumber == 0 || roundPriceInfo[roundBlockNumber].endTime > 0, "ERROR: It already has a round.");
 
         int _startPrice = _getPrice();
         // update state
         roundBlockNumber++;
         inProgress = true;
         roundPriceInfo[roundBlockNumber].startPrice = _startPrice;
+        roundPriceInfo[roundBlockNumber].startTime = block.timestamp;
 
-        emit RoundStarted(dev_interval, roundBlockNumber, shotPrice, refundFee);
-
-        uint256 counterID = createNewCounter();
-        uint256 upkeepID = uint256(keccak256(
-                abi.encodePacked(
-                    blockhash(block.number - 1),
-                    address(this),
-                    uint256(_startPrice)
-                )
-            ));
-
-        // Set the upkeep id for the counter id
-        counterToUpKeepID[counterID] = upkeepID;
+        emit RoundStarted(start_interval, roundBlockNumber, shotPrice, refundFee);
     }
 
     /** 讓 chainlink time-based automation call in every day */
     function executeRoundResult() override external {
-        uint256 counterID = abi.decode(performData_execute, (uint256));
-        bool inRound = (block.timestamp - counterToLastTimeStamp_execute[counterID]) > dev_interval_execute;
-
-        if (inRound) {
-            counterToLastTimeStamp_execute[counterID] = block.timestamp;
-            counterToValue_execute[counterID] = counterToValue_execute[counterID] + 1;
-        }
-
-        require(!inRound, "ERROR: Time is still counting down.");
+        uint256 _startTime = roundPriceInfo[roundBlockNumber].startTime;
+        require(block.timestamp - _startTime > execute_interval, "ERROR: Cannot execute round result in progress.");
+        require(roundPriceInfo[roundBlockNumber].endPrice > 0, "ERROR: Cannot re-execute in one round.");
 
         int _endPrice = _getPrice();
         int256 _startPrice = roundPriceInfo[roundBlockNumber].startPrice;
@@ -184,6 +144,7 @@ contract PredictTrends is Ownable, PredictTrendsInterface {
 
         roundPriceInfo[roundBlockNumber].endPrice = _endPrice;
         roundPriceInfo[roundBlockNumber].trendResult = trendResult;
+        roundPriceInfo[roundBlockNumber].endTime = block.timestamp;
 
         _resetState();
         emit executeResult(_startPrice, _endPrice, trendResult);

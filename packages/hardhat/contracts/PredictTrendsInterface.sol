@@ -5,36 +5,14 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
 contract PredictTrendsStorage {
-
-    /*** Counter Storage ***/
-
-    // Map value to counter
-    mapping(uint256 => uint256) public counterToValue;
-    mapping(uint256 => uint256) public counterToValue_execute;
-
-    // Map the last updated time to the counter
-    mapping(uint256 => uint256) public counterToLastTimeStamp;
-    mapping(uint256 => uint256) public counterToLastTimeStamp_execute;
-
-    // Map counter to to the upkeep
-    mapping(uint256 => uint256) public counterToUpKeepID;
-    mapping(uint256 => uint256) public counterToUpKeepID_execute;
-
-    bytes performData;
-    bytes performData_execute;
-
     /*** Predict Trends Storage ***/
 
     uint256 upAmountSum; // 賭漲的總 shot 數
     uint256 downAmountSum; // 賭跌的總 shot 數
 
-    // Set upkeep interval, 開放 20 hr 下注，4 小時 lock or 維修
-    uint256 interval = 86400;
-    uint256 interval_execute = 72000;
-
-    // for dev, 開放 1 min 下注，15 sec lock or 維修
-    uint256 dev_interval = 60;
-    uint256 dev_interval_execute = 15;
+    // How to make sure the interval is exactly same as chainlink time-based automation?
+    uint256 start_interval = 43200; // 12hr
+    uint256 execute_interval = 39600; // 11hr
 
     uint256 public shotPrice = 1000000000000; // 一注多少 eth 1000000000000 == 0.000001 ether
     uint256 public refundFee = 5; // 退款手續費 5 %
@@ -53,6 +31,8 @@ contract PredictTrendsStorage {
     struct RoundInfo {
         int startPrice; // 回合開始時的當前價格
         int endPrice; // 回合結束時的當前價格
+        uint256 startTime;
+        uint256 endTime;
         Trend trendResult; // 漲或跌 (0 跌 1 漲)
     }
     
