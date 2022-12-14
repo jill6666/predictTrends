@@ -115,7 +115,9 @@ contracts
 ```
 
 ### storages
+將定義變數、事件、interface 以及 utils （常用 function）放在 PredictTrendsInterface.sol 中
 
+有助於增加可讀性，方便維護
 ```solidity
 contract PredictTrendsStorage {
     /*** Predict Trends Storage ***/
@@ -158,7 +160,9 @@ contract PredictTrendsStorage {
 ```
 
 ### interface
+繼承 storage 的內容，為主要的 functions 定義 interface，讓合約開發人員快速理解合約內的 functions。
 
+另外，個人習慣將 events、modifier 以及 utils function 也放在這邊。（只是為了讓主合約乾淨，不確定這樣做好不好 🧐）
 ```solidity
 abstract contract PredictTrendsInterface is PredictTrendsStorage {
     // events ...
@@ -204,6 +208,8 @@ abstract contract PredictTrendsInterface is PredictTrendsStorage {
 ## Testing on Chain
 
 ### test case
+
+And passed all of the cases!
 ![predictTrends@2x (3)](https://user-images.githubusercontent.com/73696750/207617604-59f5f184-4006-42e4-9af9-9633501d051e.png)
 
 
